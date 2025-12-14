@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roblox Developer Products Viewer</title>
+<style>
+  body { font-family: Arial, sans-serif; padding: 2rem; background: #f5f5f5; }
+  h1 { text-align: center; }
+  #form { text-align: center; margin-bottom: 1rem; }
+  #products { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; }
+  .product-card { background: white; border-radius: 8px; padding: 1rem; width: 150px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+  .product-card img { width: 100px; height: 100px; object-fit: contain; margin-bottom: 0.5rem; }
+  .product-card h3 { font-size: 14px; margin: 0.5rem 0; }
+  .product-card p { font-size: 12px; color: #555; margin: 0; }
+  #controls { text-align: center; margin-bottom: 1rem; }
+  #controls input, #controls select { padding: 0.3rem 0.5rem; margin: 0 0.3rem; }
+</style>
+</head>
+<body>
+
+<h1>Roblox Developer Products Viewer</h1>
+
+<div id="form">
+  <input type="text" id="placeId" placeholder="Enter Place ID" />
+  <button id="fetchBtn">Fetch Developer Products</button>
+</div>
+
+<div id="controls" style="display:none;">
+  <input type="text" id="search" placeholder="Search by name..." />
+  <select id="sort">
+    <option value="name-asc">Name ↑</option>
+    <option value="name-desc">Name ↓</option>
+    <option value="price-asc">Price ↑</option>
+    <option value="price-desc">Price ↓</option>
+  </select>
+</div>
+
+<div id="products"></div>
+
+<script>
+let allProducts = [];
+
+async function fetchUniverseId(placeId) {
+  const res = await fetch(`https://apis.roblox.com/universes/v1/places/${placeId}/universe`);
+  if (!res.ok) throw new Error("Invalid Place ID or API error");
+  const data = await res.json();
+  return data.universeId;
+}
+
+async function fetchDeveloperProducts(universeId) {
+  let page = 1;
+  const pageSize = 100;
+  let products = [];
+  while (true) {
+    const res = await fetch(`https://apis.roblox.com/developer-products/v1/universes/${universeId}/developerproducts?pageNumber=${page}&pageSize=${pageSize}`);
+    if (!res.ok) throw new Error("Error fetching developer products");
+    const data = await res.json();
+    const pageProducts = data.data || data.developerProducts || [];
+    products = products.concat(pageProducts);
+    if (!data.nextPage) break;
+    page++;
+  }
+  return products;
+}
+
+function renderProducts(products) {
+  const container = document.getElementById("products");
+  container.innerHTML = "";
+  if (!products.length) {
+    container.innerHTML = "<p>No developer products found.</p>";
+    return;
+  }
+  products.forEach(product => {
+    const card = document.createElement("div");
+    card.className = "product-card";
+    const name = product.name || product.displayName || "Unknown";
+    const price = product.priceInRobux ?? product.price ?? "N/A";
+    const iconUrl = product.iconImageAssetId
+      ? `https://www.roblox.com/asset-thumbnail/image?assetId=${product.iconImageAssetId}&width=150&height=150&format=png`
+      : "https://via.placeholder.com/100?text=No+Icon";
+    card.innerHTML = `
+      <img src="${iconUrl}" alt="${name}" />
+      <h3>${name}</h3>
+      <p>Price: ${price} Robux</p>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function filterAndSort() {
+  const searchVal = document.getElementById("search").value.toLowerCase();
+  const sortVal = document.getElementById("sort").value;
+  let filtered = allProducts.filter(p => (p.name || p.displayName || "").toLowerCase().includes(searchVal));
+  filtered.sort((a,b) => {
+    const priceA = a.priceInRobux ?? a.price ?? 0;
+    const priceB = b.priceInRobux ?? b.price ?? 0;
+    const nameA = (a.name || a.displayName || "").toLowerCase();
+    const nameB = (b.name || b.displayName || "").toLowerCase();
+    switch(sortVal){
+      case "name-asc": return nameA.localeCompare(nameB);
+      case "name-desc": return nameB.localeCompare(nameA);
+      case "price-asc": return priceA - priceB;
+      case "price-desc": return priceB - priceA;
+    }
+  });
+  renderProducts(filtered);
+}
+
+document.getElementById("fetchBtn").addEventListener("click", async () => {
+  const placeId = document.getElementById("placeId").value.trim();
+  if (!placeId) return alert("Please enter a Place ID.");
+  const container = document.getElementById("products");
+  container.innerHTML = "<p>Loading...</p>";
+  document.getElementById("controls").style.display = "none";
+  try {
+    const universeId = await fetchUniverseId(placeId);
+    allProducts = await fetchDeveloperProducts(universeId);
+    document.getElementById("controls").style.display = "block";
+    filterAndSort();
+  } catch (err) {
+    container.innerHTML = `<p style="color:red;">Error: ${err.message}</p>`;
+    console.error(err);
+  }
+});
+
+document.getElementById("search").addEventListener("input", filterAndSort);
+document.getElementById("sort").addEventListener("change", filterAndSort);
+</script>
+
+</body>
+</html>
